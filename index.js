@@ -66,13 +66,13 @@ async function updateStatus() {
 
     // Calculate the difference for milestone
     const diff = stats.players - highestPlayers;
-    let diffText;
+    let diffText = "";
+
+    // Only show "Up by" or "Down by" if there's a change
     if (diff > 0) {
       diffText = `📈 Up by ${diff}`;
     } else if (diff < 0) {
       diffText = `📉 Down by ${Math.abs(diff)}`;
-    } else {
-      diffText = `⏸️ Stable`; // Simplified to just "Stable"
     }
 
     // Format the Discord message

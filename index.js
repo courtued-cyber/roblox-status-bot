@@ -1,11 +1,11 @@
+require('dotenv').config(); // Load TOKEN from .env or Railway env vars
 const { Client, GatewayIntentBits } = require('discord.js');
 const axios = require('axios');
 
-const TOKEN = process.env.TOKEN;
-const CHANNEL_ID = "1460087487635390556";
-const PLACE_ID = 138321611995773;
-const UNIVERSE_ID = 9504987215;
-const UPDATE_INTERVAL = 30000;
+const TOKEN = process.env.TOKEN;              // Discord bot token
+const CHANNEL_ID = "1460087487635390556";    // Discord channel ID
+const UNIVERSE_ID = 9504987215;              // Roblox Universe ID
+const UPDATE_INTERVAL = 30000;               // 30 seconds
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 let statusMessage = null;
@@ -45,12 +45,14 @@ async function updateStatus() {
     } else {
       await statusMessage.edit(messageContent);
     }
+
   } catch (err) {
-    console.error(err.message);
+    console.error("Failed to update status:", err.message);
   }
 }
 
-client.once('clientReady', () => {
+client.once('ready', () => {
+  console.log(`Logged in as ${client.user.tag}`);
   updateStatus();
   setInterval(updateStatus, UPDATE_INTERVAL);
 });

@@ -3,6 +3,7 @@ const { Client, GatewayIntentBits, ActivityType } = require("discord.js");
 const axios = require("axios");
 const express = require("express");
 const fs = require("fs");
+const { Configuration, OpenAIApi } = require("openai");
 
 // ================= Express Keep-Alive Server =================
 const app = express();
@@ -38,15 +39,23 @@ function writeHighestPlayers(highestPlayers) {
 }
 
 // ================= Discord Client =================
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const client = new Client({ 
+  intents: [
+    GatewayIntentBits.Guilds, 
+    GatewayIntentBits.GuildMessages, 
+    GatewayIntentBits.MessageContent
+  ] 
+});
 let statusMessage = null;
 let highestPlayers = readHighestPlayers();
 
-// ================= Fetch Roblox Game Stats =================
+// ================= OpenAI Setup =================
+const configuration = new Configuration({ apiKey: process.env.OPENAI_KEY });
+const openai = new OpenAIApi(configuration);
+
+// ================= Roblox Game Stats =================
 async function getGameStats() {
-  const res = await axios.get(
-    `https://games.roblox.com/v1/games?universeIds=${UNIVERSE_ID}`,
-  );
+  const res = await axios.get(`https://games.roblox.com/v1/games?universeIds=${UNIVERSE_ID}`);
   const data = res.data.data[0];
 
   return {
@@ -62,21 +71,17 @@ async function updateStatus() {
   try {
     const stats = await getGameStats();
 
-    // Update highest milestone if needed
     if (stats.players > highestPlayers) {
       highestPlayers = stats.players;
       writeHighestPlayers(highestPlayers);
     }
 
     const diff = stats.players - highestPlayers;
-    let diffText =
-      diff > 0
-        ? `📈 Up by ${diff}`
-        : diff < 0
-          ? `📉 Down by ${Math.abs(diff)}`
-          : `⏸️ Stable`;
+    const diffText =
+      diff > 0 ? `📈 Up by ${diff}` :
+      diff < 0 ? `📉 Down by ${Math.abs(diff)}` :
+      `⏸️ Stable`;
 
-    // ===== Channel Message =====
     const messageContent = `[🎮] **${stats.name.toUpperCase()}**  
 
 [👥] Active Players: **${stats.players}**  
@@ -95,7 +100,6 @@ async function updateStatus() {
 
     console.log(`Updated status: ${stats.players} players`);
 
-    // ===== Rotating Presence =====
     const presenceMessages = [
       `${stats.players} players in-game :3`,
       `${stats.favorites} total favorites! :3`,
@@ -108,14 +112,12 @@ async function updateStatus() {
 
     client.presenceInterval = setInterval(() => {
       client.user.setPresence({
-        status: "dnd", // Do Not Disturb
-        activities: [
-          { name: presenceMessages[i], type: ActivityType.Watching },
-        ],
+        status: "dnd",
+        activities: [{ name: presenceMessages[i], type: ActivityType.Watching }],
       });
-
       i = (i + 1) % presenceMessages.length;
     }, PRESENCE_INTERVAL);
+
   } catch (err) {
     console.error("Failed to update status:", err.message);
   }
@@ -124,13 +126,50 @@ async function updateStatus() {
 // ================= Discord Ready =================
 client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
-
-  // Initial update
   updateStatus();
   setInterval(updateStatus, UPDATE_INTERVAL);
-
-  // Heartbeat log
   setInterval(() => console.log("Bot is alive"), UPDATE_INTERVAL);
+});
+
+// ================= AI Chat / Mention Response =================
+const cooldowns = new Map();
+
+client.on("messageCreate", async (message) => {
+  if (message.author.bot) return;
+
+  if (message.mentions.has(client.user)) {
+    const userId = message.author.id;
+
+    // 5-second cooldown per user
+    if (cooldowns.has(userId)) {
+      return message.reply("⏳ Please wait a few seconds before chatting again!");
+    }
+    cooldowns.set(userId, true);
+    setTimeout(() => cooldowns.delete(userId), 5000);
+
+    const userMessage = message.content.replace(/<@!?(\d+)>/, "").trim();
+    if (!userMessage) {
+      return message.reply("Hello! Ping me and we can chat about anything 😄");
+    }
+
+    try {
+      const completion = await openai.createChatCompletion({
+        model: "gpt-4",
+        messages: [
+          { role: "system", content: "You are a friendly Discord bot that chats with users." },
+          { role: "user", content: userMessage },
+        ],
+      });
+
+      const reply = completion?.data?.choices?.[0]?.message?.content;
+      if (!reply) return message.reply("Hmm, I didn't get a response 😅");
+
+      await message.reply(reply);
+    } catch (err) {
+      console.error("Failed to respond via AI:", err);
+      await message.reply("Oops, something went wrong while trying to chat 😅");
+    }
+  }
 });
 
 // ================= Login =================

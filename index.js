@@ -17,7 +17,7 @@ app.get("/", (req, res) => {
 app.listen(PORT, () => console.log(`Web server running on port ${PORT}`));
 
 // ================= Config =================
-const TOKEN = process.env.TOKEN;
+const TOKEN = process.env.DISCORD_TOKEN;
 const CHANNEL_ID = "1460087487635390556";
 const UNIVERSE_ID = 9504987215;
 const UPDATE_INTERVAL = 60000; // 1 minute
@@ -174,3 +174,4 @@ client.on("messageCreate", async (message) => {
 
 // ================= Login =================
 client.login(TOKEN);
+
